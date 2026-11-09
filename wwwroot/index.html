@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Cliente WebSocket</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; }
+    #log { border: 1px solid #ccc; height: 250px; overflow-y: auto; padding: .5rem; margin: 1rem 0; }
+    #log p { margin: .2rem 0; }
+    .sent { color: #06c; } .recv { color: #070; } .sys { color: #888; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>Cliente WebSocket</h1>
+  <p>Estado: <strong id="status">desconectado</strong></p>
+  <input id="name" placeholder="Tu nombre (opcional)" maxlength="20" autocomplete="off">
+  <button id="connect">Conectar</button>
+  <button id="disconnect" disabled>Desconectar</button>
+
+  <div id="log"></div>
+
+  <form id="form">
+    <input id="msg" placeholder="Escribe un mensaje" autocomplete="off" disabled>
+    <button id="send" disabled>Enviar</button>
+  </form>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    let ws = null;
+
+    function log(text, cls) {
+      const p = document.createElement("p");
+      p.className = cls;
+      p.textContent = text;
+      $("log").appendChild(p);
+      $("log").scrollTop = $("log").scrollHeight;
+    }
+
+    function setConnected(connected) {
+      $("status").textContent = connected ? "conectado" : "desconectado";
+      $("connect").disabled = connected;
+      $("disconnect").disabled = !connected;
+      $("msg").disabled = !connected;
+      $("send").disabled = !connected;
+    }
+
+    $("connect").onclick = () => {
+      // ws:// para http, wss:// para https; location.host incluye el puerto.
+      const scheme = location.protocol === "https:" ? "wss" : "ws";
+      const name = encodeURIComponent($("name").value.trim());
+      ws = new WebSocket(`${scheme}://${location.host}/ws?name=${name}`);
+
+      ws.onopen    = () => { setConnected(true);  log("Conexión abierta", "sys"); };
+      ws.onmessage = e  => {
+        // El servidor envía JSON: {type, user, text, time}
+        const m = JSON.parse(e.data);
+        const hora = new Date(m.time).toLocaleTimeString();
+        if (m.type === "system") log(`* ${m.text}`, "sys");
+        else log(`[${hora}] ${m.user}: ${m.text}`, "recv");
+      };
+      ws.onerror   = () => log("Error de conexión", "sys");
+      ws.onclose   = e  => { setConnected(false); log(`Cerrada (código ${e.code}) ${e.reason}`, "sys"); };
+    };
+
+    $("disconnect").onclick = () => ws.close(1000, "Cierre del usuario");
+
+    $("form").onsubmit = e => {
+      e.preventDefault();
+      const text = $("msg").value;
+      if (!text) return;
+      ws.send(JSON.stringify({ text })); // el servidor nos devolverá el mensaje junto al del resto
+      $("msg").value = "";
+    };
+  </script>
+</body>
+</html>
